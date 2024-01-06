@@ -15,7 +15,7 @@ func (app *application) createMovieHandler(w http.ResponseWriter, r *http.Reques
 func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := app.readIDParam(r)
 	if err != nil {
-		http.NotFound(w, r)
+		app.notFoundResponse(w, r)
 		return
 	}
 
@@ -29,11 +29,9 @@ func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request)
 
 	err = app.writeJSON(w, http.StatusOK, envelop{"movie": movie}, nil)
 	if err != nil {
-		app.logger.Error(err.Error())
-		http.Error(w, "the service enco", http.StatusInternalServerError)
+		app.serverErrorResponse(w, r, err)
+		return
 	}
-
-	fmt.Fprintf(w, "show the details of movies %d\n", id)
 
 }
 
@@ -47,5 +45,6 @@ func (app *application) exampleHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		app.logger.Error(err.Error())
 		http.Error(w, "The Server encountered a problem and could not process your request", http.StatusInternalServerError)
+
 	}
 }
