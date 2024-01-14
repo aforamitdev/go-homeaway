@@ -1,4 +1,4 @@
 
 ### command to run application 
 
-r
+>  migrate create -seq -ext=.sql -dir=./migrations migrations_name
