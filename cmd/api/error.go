@@ -44,3 +44,8 @@ func (app *application) bedRequestResponse(w http.ResponseWriter, r *http.Reques
 	app.errorResponse(w, r, http.StatusBadRequest, err.Error())
 
 }
+
+func (app *application) editConflictResponse(w http.ResponseWriter, r *http.Request) {
+	message := "unable to update the record due to an edit conflicts, please try again "
+	app.errorResponse(w, r, http.StatusConflict, message)
+}

@@ -39,7 +39,7 @@ func main() {
 
 	flag.IntVar(&cfg.port, "port", 4800, "API Server port")
 	flag.StringVar(&cfg.evn, "env", "development", "Environment (development|staging|production)")
-	flag.StringVar(&cfg.db.dns, "db-dns", "postgres://localhost:5432:admin@admin/linux", "Postgres DNS")
+	flag.StringVar(&cfg.db.dns, "db-dns", "postgres://admin:admin@localhost:5432/linux?sslmode=disable", "Postgres DNS")
 
 	// Read the connection pool settings from command-line flags into the config struct.
 	// Notice that the default values we're using are the ones we discussed above?
@@ -51,7 +51,9 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	db, err := openDb(cfg)
-
+	if err != nil {
+		fmt.Println("data base error")
+	}
 	app := &application{
 		config: cfg,
 		logger: logger,
@@ -86,6 +88,7 @@ func openDb(cfg config) (*sql.DB, error) {
 
 	err = db.PingContext(ctx)
 
+	fmt.Println(err, "error")
 	if err != nil {
 		db.Close()
 		return nil, err

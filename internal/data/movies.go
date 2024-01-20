@@ -1,8 +1,10 @@
 package data
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -54,23 +56,130 @@ func (m Movie) MarshalJSON() ([]byte, error) {
 }
 
 func (m MovieMode) Insert(movie *Movie) error {
+	query := `INSERT INTO movies(title,year,runtime,genres) VALUES ($1,$2,$3,$4) RETURNING id,created_at,version`
+	fmt.Println(m.DB.Stats())
 
-	query := `INSERT INTO movies(title,year,runtime,genres) VALUE ($1,$2,$3,$4) RETURN id,created_at,version`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 
 	args := []any{movie.Title, movie.Year, movie.Runtime, pq.Array(movie.Genres)}
+	fmt.Println(query)
 
-	return m.DB.QueryRow(query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+	row := m.DB.QueryRowContext(ctx, query, args...)
+
+	err := row.Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return err
 
 }
 
-func (m MovieMode) get(id int64) (*Movie, error) {
-	return nil, nil
+func (m MovieMode) Get(id int64) (*Movie, error) {
+
+	if id < 1 {
+		return nil, ErrRecordNotFound
+	}
+	query := `SELECT id,created_at,title,year,runtime,genres,version FROM movies where id=$1`
+
+	var movie Movie
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	err := m.DB.QueryRowContext(ctx, query, id).Scan(&movie.ID, &movie.CreatedAt, &movie.Title, &movie.Year, &movie.Runtime, pq.Array(&movie.Genres), &movie.Version)
+	fmt.Println(err)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+	return &movie, nil
+
 }
 
 func (m MovieMode) Update(movie *Movie) error {
-	return nil
+	query := `UPDATE movies SET title=$1,year=$2,runtime=$3,genres=$4,version=uuid_generate_v4() WHERE id=$5 RETURNING version`
+
+	args := []any{movie.Title, movie.Year, movie.Runtime, pq.Array(movie.Genres), movie.ID}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := m.DB.QueryRowContext(ctx, query, args...).Scan(&movie.ID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+	return err
+
 }
 
 func (m MovieMode) Delete(id int64) error {
+
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+
+	query := `DELETE FROM movies WHERE id=$1`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	cancel()
+
+	result, err := m.DB.ExecContext(ctx, query, id)
+
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
 	return nil
+
+}
+
+func (m MovieMode) GetAll(title string, genres []string, filter Filter) ([]*Movie, error) {
+	query := `SELECT id,created_at,title,year, runtime, genres,version FROM movies ORDER BY id`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	rows, err := m.DB.QueryContext(ctx, query)
+
+	if err != nil {
+		return nil, err
+	}
+
+	movies := []*Movie{}
+
+	for rows.Next() {
+		var movie Movie
+
+		err := rows.Scan(&movie.ID, &movie.CreatedAt, &movie.Title, &movie.Year, &movie.Runtime, pq.Array(&movie.Genres), &movie.Version)
+
+		if err != nil {
+			return nil, err
+		}
+		movies = append(movies, &movie)
+
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return movies, nil
 }
